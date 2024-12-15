@@ -1,6 +1,6 @@
 {
   "name": "band-dl",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Sweet succulent 200 lines to download from Bandcamp",
   "main": "index.js",
   "bin": "index.js",
