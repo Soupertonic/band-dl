@@ -51,7 +51,7 @@ const processAlbums = async (artist, albums) => {
 }
 
 const fetchAvailableAlbums = async (artist) => {
-  const bandcampUrl = `https://${artist}.bandcamp.com/`
+  const bandcampUrl = `https://${artist}.bandcamp.com/music`
   const bandcampResponse = await fetch(bandcampUrl).then(v => v.text())
   const bandcampHtml = parse(bandcampResponse)
 
