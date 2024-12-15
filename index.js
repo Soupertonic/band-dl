@@ -41,7 +41,7 @@ const processAllAlbums = async (artist) => {
 
 const processSelectedAlbums = async (artist, albums) => {
   const songs = await async.flatMapLimit(albums, 8, async album => await fetchAvailableSongs(artist, album))
-  const _ = await async.eachLimit(songs, 8, async song => await downloadSong(song))
+//  const _ = await async.eachLimit(songs, 8, async song => await downloadSong(song))
 }
 
 const fetchAvailableAlbums = async (artist) => {
@@ -49,9 +49,23 @@ const fetchAvailableAlbums = async (artist) => {
   const bandcampResponse = await fetch(bandcampUrl).then(v => v.text())
   const bandcampHtml = parse(bandcampResponse)
 
-  const albums =
-    tryExtractAlbumsFromDataAttribute(bandcampHtml) ??
-    tryExtractAlbumsFromDom(bandcampHtml)
+  // Getting a good glimpse? This is what I call
+  // "officially the worse frontend I have ever seen"
+  // Bandcamp's album data doesn't include the first
+  // sixteen albums. So we need to extract them from
+  // the DOM.
+
+  // And weirdly enough, there's also a huge bug with
+  // the html parsing library I'm using that any albums
+  // in the DOM are not included in the query selector
+  // result if the element count exceeds 16... Shitty
+  // bugs and shitty frontend come together to create
+  // this beauty. (below vvvvvvvvvvvvvvvvv)
+
+  let albums = []
+  albums.push(tryExtractAlbumsFromDom(bandcampHtml) ?? [])
+  albums.push(tryExtractAlbumsFromDataAttribute(bandcampHtml) ?? [])
+  albums = albums.flat()
 
   if (albums === null) {
     aborted("Unable to fetch albums for", chalk.yellowBright(artist), "(Do they have any albums?)")
@@ -60,6 +74,7 @@ const fetchAvailableAlbums = async (artist) => {
 
   fetched("Available albums for",
     chalk.yellowBright(artist),
+    chalk.cyanBright(`[${albums.length}]`),
     chalk.greenBright(`(${albums.map(album => album.title)})`)
   )
 
@@ -135,7 +150,7 @@ const tryExtractAlbumsFromDataAttribute = (document) => {
 }
 
 const tryExtractAlbumsFromDom = (document) => {
-  const albumAnchorElements = document.querySelectorAll(".music-grid-item > a")
+  const albumAnchorElements = document.querySelectorAll(`[data-bind="css: {'featured': featured()}"] > a`)
 
   if (albumAnchorElements === undefined || albumAnchorElements === null) {
     return null
@@ -147,7 +162,7 @@ const tryExtractAlbumsFromDom = (document) => {
 
   const albums = albumAnchorElements.map(anchorElement => {
     return {
-      title: anchorElement.querySelector("p").innerText.trim(),
+      title: anchorElement.querySelector("p").innerText.trim().replaceAll("\n", ""),
       identifier: anchorElement.getAttribute("href").split("/").pop(),
     }
   })
