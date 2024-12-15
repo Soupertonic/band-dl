@@ -1,5 +1,5 @@
 {
-  "name": "bdl",
+  "name": "band-dl",
   "version": "1.0.0",
   "description": "Sweet succulent 200 lines to download from Bandcamp",
   "main": "index.js",
