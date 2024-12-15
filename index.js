@@ -1,14 +1,13 @@
 #!/usr/bin/env node
 
-import { mkdirSync, createWriteStream } from "node:fs"
 import { finished } from "node:stream/promises"
+import { mkdirSync, createWriteStream } from "node:fs"
 
-import { parse } from 'node-html-parser'
+import async from 'async'
 import axios from 'axios'
 import chalk from 'chalk'
-import async from 'async'
-import jsdom from "jsdom"
 import sanitize from 'sanitize-filename'
+import { parse } from 'node-html-parser'
 
 const parameters = process.argv.slice(2)
 const silent = Boolean(parseInt(process.env.BDL_SILENT || 0))
@@ -16,7 +15,7 @@ const silent = Boolean(parseInt(process.env.BDL_SILENT || 0))
 const run = async () => {
   const parametersEmpty = parameters.length == 0
   if (parametersEmpty) {
-    console.error("No parameters provided - abort.")
+    aborted("No parameters provided")
     process.exit(1)
   }
 
@@ -36,31 +35,25 @@ const run = async () => {
 
 const processAllAlbums = async (artist) => {
   const albums = await fetchAvailableAlbums(artist)
-  return processSelectedAlbums(artist, albums)
+  return processAlbums(artist, albums)
 }
 
-const processSelectedAlbums = async (artist, albums) => {
+const processSelectedAlbums = async (artist, albumIdentifiers) => {
+  const albumsAll = await fetchAvailableAlbums(artist)
+  const albums = albumsAll.filter(album => albumIdentifiers.includes(album.identifier))
+
+  return processAlbums(artist, albums)
+}
+
+const processAlbums = async (artist, albums) => {
   const songs = await async.flatMapLimit(albums, 8, async album => await fetchAvailableSongs(artist, album))
-//  const _ = await async.eachLimit(songs, 8, async song => await downloadSong(song))
+  const _ = await async.eachLimit(songs, 8, async song => await downloadSong(song))
 }
 
 const fetchAvailableAlbums = async (artist) => {
-  const bandcampUrl = buildArtistUrl(artist)
+  const bandcampUrl = `https://${artist}.bandcamp.com/`
   const bandcampResponse = await fetch(bandcampUrl).then(v => v.text())
   const bandcampHtml = parse(bandcampResponse)
-
-  // Getting a good glimpse? This is what I call
-  // "officially the worse frontend I have ever seen"
-  // Bandcamp's album data doesn't include the first
-  // sixteen albums. So we need to extract them from
-  // the DOM.
-
-  // And weirdly enough, there's also a huge bug with
-  // the html parsing library I'm using that any albums
-  // in the DOM are not included in the query selector
-  // result if the element count exceeds 16... Shitty
-  // bugs and shitty frontend come together to create
-  // this beauty. (below vvvvvvvvvvvvvvvvv)
 
   let albums = []
   albums.push(tryExtractAlbumsFromDom(bandcampHtml) ?? [])
@@ -68,11 +61,16 @@ const fetchAvailableAlbums = async (artist) => {
   albums = albums.flat()
 
   if (albums === null) {
-    aborted("Unable to fetch albums for", chalk.yellowBright(artist), "(Do they have any albums?)")
+    aborted(
+      "Unable to fetch albums for",
+      chalk.yellowBright(artist),
+      "(Do they have any albums?)"
+    )
     process.exit(2)
   }
 
-  fetched("Available albums for",
+  fetched(
+    "Available albums for",
     chalk.yellowBright(artist),
     chalk.cyanBright(`[${albums.length}]`),
     chalk.greenBright(`(${albums.map(album => album.title)})`)
@@ -82,7 +80,7 @@ const fetchAvailableAlbums = async (artist) => {
 }
 
 const fetchAvailableSongs = async (artist, album) => {
-  const bandcampUrl = buildAlbumUrl(artist, album)
+  const bandcampUrl = `https://${artist}.bandcamp.com/album/${album.identifier}`
   const bandcampResponse = await axios.get(bandcampUrl)
   const bandcampHtml = parse(bandcampResponse.data)
   
@@ -101,7 +99,8 @@ const fetchAvailableSongs = async (artist, album) => {
     }
   })
 
-  fetched("Available songs for",
+  fetched(
+    "Available songs for",
     chalk.yellowBright(album.title),
     chalk.greenBright(`(${songs.map(song => song.title)})`)
   )
@@ -162,20 +161,15 @@ const tryExtractAlbumsFromDom = (document) => {
 
   const albums = albumAnchorElements.map(anchorElement => {
     return {
-      title: anchorElement.querySelector("p").innerText.trim().replaceAll("\n", ""),
       identifier: anchorElement.getAttribute("href").split("/").pop(),
+      title: Array.from(anchorElement.querySelector("p").childNodes)
+        .filter(n => n.nodeType == 3 /* Node.TEXT_NODE */)
+        .map(n => n.textContent.trim())
+        .shift(),
     }
   })
 
   return albums
-}
-
-const buildArtistUrl = (artist) =>  {
-  return `https://${artist}.bandcamp.com/`
-}
-
-const buildAlbumUrl = (artist, album) => {
-  return `https://${artist}.bandcamp.com/album/${album.identifier}`
 }
 
 const aborted = (...message) => {
