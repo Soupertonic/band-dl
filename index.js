@@ -9,10 +9,12 @@ import chalk from 'chalk'
 import sanitize from 'sanitize-filename'
 import { parse } from 'node-html-parser'
 
+const filter = process.env.BDL_FILTER;
 const parameters = process.argv.slice(2)
 const silent = Boolean(parseInt(process.env.BDL_SILENT || 0))
 
 const run = async () => {
+  console.log(filter);
   const parametersEmpty = parameters.length == 0
   if (parametersEmpty) {
     aborted("No parameters provided")
@@ -23,24 +25,25 @@ const run = async () => {
   if (parametersDeclareArtist) {
     const artist = parameters[0]
     await processAllAlbums(artist)
-  } 
+  }
 
   const parametersDeclareArtistAndAlbums = parameters.length > 1
   if (parametersDeclareArtistAndAlbums) {
     const artist = parameters[0]
     const albums = parameters.slice(1)
     await processSelectedAlbums(artist, albums)
-  } 
+  }
 }
 
 const processAllAlbums = async (artist) => {
-  const albums = await fetchAvailableAlbums(artist)
+  const albumsAll = await fetchAvailableAlbums(artist)
+  const albums = albumsAll.filter(album => album.identifier.includes(filter));
   return processAlbums(artist, albums)
 }
 
 const processSelectedAlbums = async (artist, albumIdentifiers) => {
   const albumsAll = await fetchAvailableAlbums(artist)
-  const albums = albumsAll.filter(album => albumIdentifiers.includes(album.identifier))
+  const albums = filter !== undefined ? albumsAll.filter(album => albumIdentifiers.includes(album.identifier)) : albumsAll;
 
   return processAlbums(artist, albums)
 }
